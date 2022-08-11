@@ -6,6 +6,7 @@ import os
 from Cipher import AESCipher
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.PublicKey import RSA
+from email.message import EmailMessage
 
 person1_email = os.environ.get('P1_EMAIL')
 person1_pass = os.environ.get('P1_PASS')
@@ -63,14 +64,15 @@ def user_select(): #select user
 def send_mail(tempList):
     sub_input = input("Enter the Subject\n")
     body_input = input("Enter the Body\n")
+    msg = EmailMessage()
     
-    with smtplib.SMTP('smtp.gmail.com',587) as smtp:
-        smtp.ehlo() 
-        smtp.starttls() #traffic encryption
-        smtp.ehlo() #re-establish as encrypted traffic
-        
+    with smtplib.SMTP_SSL('smtp.gmail.com',465) as smtp:
         print("Sender email: %s\nSender pass: %s\n"%(tempList[0], tempList[2]))
         smtp.login(tempList[0], tempList[2]) #sender email and pass
+        
+        msg['Subject'] = str(sub_input) #setting subject
+        msg['From'] = tempList[0]       #setting sender email
+        msg['To'] = tempList[1]         #setting reciver email
         
         encryption_input = input("Enter 1 to Encypt your msg\nEnter 2 to Skip\n")
         while True:
@@ -78,39 +80,44 @@ def send_mail(tempList):
                 #generatng aeskey
                 AesKey = keyGen()
                 
-                file_out = open("AesKey.txt", "wb")
+                file_out = open("AesKey.txt", "w")
                 file_out.write(AesKey)#TODO encrytpt aes with rsa
                 file_out.close()
 
                 #encrypting
-                hash_obj = AESCipher(AesKey)
+                aes = AESCipher(AesKey)
                 
-                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,hash_obj.encrypt(str(body_input))))
+                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
                 
-                #TODO turn this part into json format and save to file then send the json file as attatchment, use body as special identifier(for now)
+                #TODO turn this part into json format and save to file 
+                # then send the json file as attatchment, 
+                # use body as special identifier(for now)               
                 
-                msg = 'Subject: %s\n\n%s'%(str(sub_input),hash_obj.encrypt(str(body_input)))
+                msg.set_content(aes.encrypt(str(body_input)))
+                print("Body: %s"%(msg.get_content()))
+                
                 break
             elif str(encryption_input) == "2":
-                msg = 'Subject: %s\n\n%s'%(str(sub_input),str(body_input))
+                msg.set_content(str(body_input))
+                print("Body: %s"%(msg.get_content()))
                 break
             else:
                 print("Please Enter a Valid Input\n")
                 
         #TODO get signing method from testground
-        signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
-        while True:
-            if str(signing_input) == "1":
-                pass
-                break
-            elif str(signing_input) == "2":
-                msg = 'Subject: %s\n\n%s'%(str(sub_input),str(body_input))
-                break
-            else:
-                print("Please Enter a Valid Input\n")
+        # signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
+        # while True:
+        #     if str(signing_input) == "1":
+        #         pass
+        #         break
+        #     elif str(signing_input) == "2":
+        #         msg = 'Subject: %s\n\n%s'%(str(sub_input),str(body_input))
+        #         break
+        #     else:
+        #         print("Please Enter a Valid Input\n")
 
-        print("Reciver email: %s\nmsg: %s\n"%(tempList[1], msg))
-        smtp.sendmail(tempList[0], tempList[1], msg) #sender and reciver email
+        print("Body: %s"%(msg.get_content()))
+        smtp.send_message(msg) #sender and reciver email
     
         print("message send\n")
 
