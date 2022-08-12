@@ -157,6 +157,7 @@ def sign_with_private(msg,person):
     signer = PKCS1_v1_5.new(private_key)
     signature = signer.sign(hash_obj)
 
+    #TODO return signature for the output_json method?
     print(signature.hex())
 
 
@@ -186,6 +187,17 @@ def verify_with_public(person):
         print ("The signature is valid.")
     except (ValueError, TypeError):
         print ("The signature is not valid.")
+
+def output_json(encrypt,sign):
+    # Create json attachment.
+                tempDic = {'Encryption':encrypt,'Signature':sign}
+                attachment = json.dumps(tempDic)
+                
+                # Encode to bytes
+                bs = attachment.encode('utf-8')
+
+                # Attach
+                msg.add_attachment(bs, maintype='application', subtype='json', filename='test.json')
 
 # sign_with_private("this is the msg","p1")
 # verify_with_public("p1")
