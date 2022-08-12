@@ -1,7 +1,9 @@
 from Crypto.Hash import SHA256
 from Crypto.Signature import PKCS1_v1_5
 from Crypto.PublicKey import RSA
+from Cipher import AESCipher
 import sys
+import random
 import os.path
 import os
 import base64
@@ -54,12 +56,12 @@ def user_select(): #select user
     
     if str(user_select) == "1": #person 1
         print("person 1 selected\n")
-        tempList = [person1_email,person2_email,person1_pass]
+        tempList = [person1_email,person2_email,person1_pass,'p1']
         return(tempList)
             
     elif str(user_select) == "2": #person 2
         print("person 2 selected\n")
-        tempList = [person2_email,person1_email,person2_pass]
+        tempList = [person2_email,person1_email,person2_pass,'p2']
         return(tempList)
             
     else:
@@ -78,60 +80,48 @@ def send_mail(tempList):
         msg['From'] = tempList[0]       #setting sender email
         msg['To'] = tempList[1]         #setting reciver email
         
+        tempDic = {'EncryptionKey':'','Signature':''}
+        
         encryption_input = input("Enter 1 to Encypt your msg\nEnter 2 to Skip\n")
         while True:
             if str(encryption_input) == "1":
                 #generatng aeskey
                 AesKey = keyGen()
                 
-                file_out = open("AesKey.txt", "w")
-                file_out.write(AesKey)#TODO encrytpt aes with rsa
-                file_out.close()
-
                 #encrypting
                 aes = AESCipher(AesKey)
+                tempDic.update({'EncryptionKey':AesKey})
                 
                 print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
-                
-                #TODO turn this part into json format and save to file then send the json file as attatchment, use body as special identifier(for now)
-                
-                
+                 
                 msg.set_content(aes.encrypt(str(body_input)))
-                print("Body: %s"%(msg.get_content()))
                 
                 break
             elif str(encryption_input) == "2":
+                tempDic.update({'EncryptionKey':"Unencrypted"})
                 msg.set_content(str(body_input))
-                
-                # Create json attachment.
-                jname = "jsontId"
-                jdata = "formated"
-                attachment = json.dumps({jname: jdata})
-                
-                # Encode to bytes
-                bs = attachment.encode('utf-8')
-
-                # Attach
-                msg.add_attachment(bs, maintype='application', subtype='json', filename='test.json')
-                
                 break
             else:
                 print("Please Enter a Valid Input\n")
                 
-        #TODO get signing method from testground
-        # signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
-        # while True:
-        #     if str(signing_input) == "1":
-        #         pass
-        #         break
-        #     elif str(signing_input) == "2":
-        #         msg = 'Subject: %s\n\n%s'%(str(sub_input),str(body_input))
-        #         break
-        #     else:
-        #         print("Please Enter a Valid Input\n")
+        signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
+        while True:
+            if str(signing_input) == "1":
+                
+                tempDic.update({'Signature':sign_with_private(str(body_input), tempList[3]).hex()})
+                print("Signature: %s"%(tempDic['Signature']))
+                break
+            
+            elif str(signing_input) == "2":
+                tempDic.update({'Signature':'Unsigned'})
+                break
+            else:
+                print("Please Enter a Valid Input\n")
 
+        output_json(tempDic,msg)
         smtp.send_message(msg) #sender and reciver email
-    
+
+        print("Dic content: %s"%(tempDic))
         print("message send\n")
 
 def keyGen():
@@ -153,33 +143,17 @@ def sign_with_private(msg,person):
     private_key = RSA.import_key(open(person + '_private_key.pem').read())
     hash_obj = SHA256.new(message)
 
-
     signer = PKCS1_v1_5.new(private_key)
     signature = signer.sign(hash_obj)
 
-    #TODO return signature for the output_json method?
     print(signature.hex())
 
+    return signature
 
-    file_out = open("signature.pem", "wb")
-    file_out.write(signature)
-    file_out.close()
-
-    file_out = open("message.txt", "wb")
-    file_out.write(message)
-    file_out.close()
-
-def verify_with_public(person):
+def verify_with_public(signature,person,msg):
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
 
-
-    file_in = open("message.txt", "rb")
-    message = file_in.read()
-    file_in.close()
-
-    file_in = open("signature.pem", "rb")
-    signature = file_in.read()
-    file_in.close()
+    message = bytes(msg,'utf-8')
     hash_obj = SHA256.new(message)
 
     try:
@@ -188,18 +162,18 @@ def verify_with_public(person):
     except (ValueError, TypeError):
         print ("The signature is not valid.")
 
-def output_json(encrypt,sign):
+def output_json(tempDic,msg):
     # Create json attachment.
-                tempDic = {'Encryption':encrypt,'Signature':sign}
-                attachment = json.dumps(tempDic)
+    attachment = json.dumps(tempDic)
                 
-                # Encode to bytes
-                bs = attachment.encode('utf-8')
+    # Encode to bytes
+    bs = attachment.encode('utf-8')
 
-                # Attach
-                msg.add_attachment(bs, maintype='application', subtype='json', filename='test.json')
+    # Attach
+    msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
 
-# sign_with_private("this is the msg","p1")
-# verify_with_public("p1")
-list = [person1_email,person2_email,person1_pass] 
-send_mail(list)
+# pem_check()
+# list = [person1_email,person2_email,person1_pass] 
+send_mail(user_select())
+
+# verify_with_public(sign_with_private("this is the msg", "p1"), "p1","this is the msg")

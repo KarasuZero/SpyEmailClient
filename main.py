@@ -1,12 +1,14 @@
 import hashlib
 import smtplib
 import random
-import os.path
+import json
 import os
 from Cipher import AESCipher
 from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Signature import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from email.message import EmailMessage
+from Crypto.Hash import SHA256
 
 person1_email = os.environ.get('P1_EMAIL')
 person1_pass = os.environ.get('P1_PASS')
@@ -47,20 +49,20 @@ def pem_gen(person): #pass in prefixes
     
 def user_select(): #select user
     user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n")
-  
+    
     if str(user_select) == "1": #person 1
         print("person 1 selected\n")
-        tempList = [person1_email,person2_email,person1_pass]
+        tempList = [person1_email,person2_email,person1_pass,'p1']
         return(tempList)
-                
+            
     elif str(user_select) == "2": #person 2
         print("person 2 selected\n")
-        tempList = [person2_email,person1_email,person2_pass]
+        tempList = [person2_email,person1_email,person2_pass,'p2']
         return(tempList)
-                
-    else:
-        print("Please Enter a Valid Input\n")
             
+    else:
+        print("Please Enter a Valid Input\n")           
+
 def send_mail(tempList):
     sub_input = input("Enter the Subject\n")
     body_input = input("Enter the Body\n")
@@ -74,51 +76,51 @@ def send_mail(tempList):
         msg['From'] = tempList[0]       #setting sender email
         msg['To'] = tempList[1]         #setting reciver email
         
+        tempDic = {'EncryptionKey':'','Signature':''}
+        
         encryption_input = input("Enter 1 to Encypt your msg\nEnter 2 to Skip\n")
         while True:
             if str(encryption_input) == "1":
                 #generatng aeskey
                 AesKey = keyGen()
                 
-                file_out = open("AesKey.txt", "w")
-                file_out.write(AesKey)#TODO encrytpt aes with rsa
-                file_out.close()
-
                 #encrypting
                 aes = AESCipher(AesKey)
                 
+                #TODO RSA encrypt with recipient public key before updating
+                tempDic.update({'EncryptionKey':AesKey})
+                
                 print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
-                
-                #TODO turn this part into json format and save to file 
-                # then send the json file as attatchment, 
-                # use body as special identifier(for now)               
-                
+                 
                 msg.set_content(aes.encrypt(str(body_input)))
-                print("Body: %s"%(msg.get_content()))
-                
                 break
+            
             elif str(encryption_input) == "2":
+                tempDic.update({'EncryptionKey':"Unencrypted"})
                 msg.set_content(str(body_input))
-                print("Body: %s"%(msg.get_content()))
                 break
+            
             else:
                 print("Please Enter a Valid Input\n")
                 
-        #TODO get signing method from testground
-        # signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
-        # while True:
-        #     if str(signing_input) == "1":
-        #         pass
-        #         break
-        #     elif str(signing_input) == "2":
-        #         msg = 'Subject: %s\n\n%s'%(str(sub_input),str(body_input))
-        #         break
-        #     else:
-        #         print("Please Enter a Valid Input\n")
+        signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
+        while True:
+            if str(signing_input) == "1":
+                tempDic.update({'Signature':sign_with_private(str(body_input), tempList[3])})
+                print("Signature: %s"%(tempDic['Signature']))
+                break
+            
+            elif str(signing_input) == "2":
+                tempDic.update({'Signature':'Unsigned'})
+                break
+            
+            else:
+                print("Please Enter a Valid Input\n")
 
-        print("Body: %s"%(msg.get_content()))
+        output_json(tempDic,msg)
         smtp.send_message(msg) #sender and reciver email
-    
+
+        print("Dic content: %s"%(tempDic))
         print("message send\n")
 
 def keyGen():
@@ -133,22 +135,60 @@ def keyGen():
 
     return AesKey
 
+def sign_with_private(msg,person):
+  
+    message = bytes(msg,'utf-8')
+    
+    private_key = RSA.import_key(open(person + '_private_key.pem').read())
+    hash_obj = SHA256.new(message)
+
+    signer = PKCS1_v1_5.new(private_key)
+    signature = signer.sign(hash_obj)
+
+    print(signature.hex())
+
+    return signature
+
+def verify_with_public(signature,person,msg):
+    public_key = RSA.import_key(open(person + '_public_key.pem').read())
+
+    message = bytes(msg,'utf-8')
+    hash_obj = SHA256.new(message)
+
+    try:
+        PKCS1_v1_5.new(public_key).verify(hash_obj, signature)
+        print ("The signature is valid.")
+    except (ValueError, TypeError):
+        print ("The signature is not valid.")
+
+def output_json(tempDic,msg):
+    # Create json attachment.
+    attachment = json.dumps(tempDic)
+                
+    # Encode to bytes
+    bs = attachment.encode('utf-8')
+
+    # Attach
+    msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
+
 
 #app
 while True:
     menu_select = input("Enter 1 to Send Email\nEnter 2 to Recive Email\nEnter 3 to Exit\n")
     
-    with smtplib.SMTP('smtp.gmail.com',587) as smtp:
-        if str(menu_select) == "1": #sending email
-            send_mail(user_select())
+    if str(menu_select) == "1": #sending email
+        send_mail(user_select())
         
-        elif str(menu_select) == "2": #recive email
-            print("Nothing here\n")
-            #user_select()
-            #todo recive method
+    elif str(menu_select) == "2": #recive email
+        print("Nothing here\n")
+        #user_select()
+        #TODO recive method
         
-        elif str(menu_select) == "3": #exit
-            break
+    elif str(menu_select) == "3": #exit
+        break
     
-        else:
-            print("Please Enter a Valid Input\n")
+    elif str(menu_select) == "pem_check": #exit
+        pem_check()
+    
+    else:
+        print("Please Enter a Valid Input\n")
