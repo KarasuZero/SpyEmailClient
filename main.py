@@ -64,7 +64,9 @@ def user_select(): #select user
     else:
         print("Please Enter a Valid Input\n")           
 
-def send_mail(tempList):
+def send_mail(tempList): 
+    #pass in a list with following params:
+    #[sender email,recipient email,sender app pass, selected user prefix for other methods]
     sub_input = input("Enter the Subject\n")
     body_input = input("Enter the Body\n")
     msg = EmailMessage()
@@ -125,7 +127,7 @@ def send_mail(tempList):
         print("Dic content: %s"%(tempDic))
         print("message send\n")
 
-def keyGen():
+def keyGen(): #generates key for aes cipher
     Alphabet_Dic = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     Chars=[]
     AesKey = ""
@@ -137,7 +139,7 @@ def keyGen():
 
     return AesKey
 
-def sign_with_private(msg,person):
+def sign_with_private(msg,person):#pass in the body text as str and sender prefixes
   
     message = bytes(msg,'utf-8')
     
@@ -151,7 +153,7 @@ def sign_with_private(msg,person):
 
     return signature_in_str
 
-def verify_with_public(signature_in_str,person,msg):
+def verify_with_public(signature_in_str,person,msg):#pass in signature in str format, sender prefixe, and msg recived to verify
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
     
     signature = bytes(signature_in_str,'utf-8')
@@ -165,7 +167,7 @@ def verify_with_public(signature_in_str,person,msg):
     except (ValueError, TypeError):
         print ("The signature is not valid.")
 
-def output_json(tempDic,msg):
+def output_json(tempDic,msg):#pass in a dictionary with all the info and msg from EmailMessage component
     # Create json attachment.
     attachment = json.dumps(tempDic)
                 
@@ -175,7 +177,7 @@ def output_json(tempDic,msg):
     # Attach
     msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
 
-def RSA_Encryption(aesKey,person):
+def RSA_Encryption(aesKey,person):#pass in the aes key and the selected person prefixes
     print("Key: %s"%(aesKey))
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
     key_bytes = bytes(aesKey,'utf-8')
@@ -193,7 +195,7 @@ def RSA_Encryption(aesKey,person):
     
     return key_in_str
 
-def RSA_Decryption(key_in_str,person):
+def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and the selected person prefixes
     private_key = RSA.import_key(open(person + '_private_key.pem').read())
     
     b64_bytes = bytes(key_in_str,'utf-8')
@@ -219,6 +221,11 @@ while True:
         print("Nothing here\n")
         #user_select()
         #TODO recive method
+        #download attached json file(crdentials.js)
+        #if msg is encrypted and signed, then decrypt the msg first before verifying signature
+        #if msg is unencrypted and unsigned, then just display as it is
+        #if msg is encrypted and unsigned, then unencrypt then display the msg
+        #if msg is unencrypted and signed, then verify the signature as usual
         
     elif str(menu_select) == "3": #exit
         break
