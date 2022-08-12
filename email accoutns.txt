@@ -1,7 +1,7 @@
-person1EnTest@gmail.com	
-person1EnTest123!
-aedtcblcnmedgvtz
+Email: person1EnTest@gmail.com	
+Email pass: person1EnTest123!
+App pass: aedtcblcnmedgvtz
 
-person2EnTest@gmail.com
-person2EnTest123!
-qnuhawzjvilblazm
+Email: person2EnTest@gmail.com
+Email pass: person2EnTest123!
+App pass: qnuhawzjvilblazm

@@ -1,18 +1,15 @@
-from Crypto.Hash import SHA256
+import hashlib
+import smtplib
+import base64
+import random
+import json
+import os
+from Cipher import AESCipher
+from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Signature import PKCS1_v1_5
 from Crypto.PublicKey import RSA
-from Cipher import AESCipher
-import sys
-import random
-import os.path
-import os
-import base64
-import hashlib
-from Crypto.Random import get_random_bytes
-from Crypto.Cipher import AES, PKCS1_OAEP
 from email.message import EmailMessage
-import smtplib
-import json
+from Crypto.Hash import SHA256
 
 person1_email = os.environ.get('P1_EMAIL')
 person1_pass = os.environ.get('P1_PASS')
@@ -90,31 +87,35 @@ def send_mail(tempList):
                 
                 #encrypting
                 aes = AESCipher(AesKey)
-                tempDic.update({'EncryptionKey':AesKey})
+                
+                #TODO RSA encrypt with recipient public key before updating
+                RSA_Encrypted_Key = RSA_Encryption(AesKey, tempList[3])
+                tempDic.update({'EncryptionKey':RSA_Encrypted_Key})
                 
                 print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
                  
                 msg.set_content(aes.encrypt(str(body_input)))
-                
                 break
+            
             elif str(encryption_input) == "2":
                 tempDic.update({'EncryptionKey':"Unencrypted"})
                 msg.set_content(str(body_input))
                 break
+            
             else:
                 print("Please Enter a Valid Input\n")
                 
         signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
         while True:
             if str(signing_input) == "1":
-                
-                tempDic.update({'Signature':sign_with_private(str(body_input), tempList[3]).hex()})
+                tempDic.update({'Signature':sign_with_private(str(body_input), tempList[3])})
                 print("Signature: %s"%(tempDic['Signature']))
                 break
             
             elif str(signing_input) == "2":
                 tempDic.update({'Signature':'Unsigned'})
                 break
+            
             else:
                 print("Please Enter a Valid Input\n")
 
@@ -146,14 +147,16 @@ def sign_with_private(msg,person):
     signer = PKCS1_v1_5.new(private_key)
     signature = signer.sign(hash_obj)
 
-    print(signature.hex())
+    signature_in_str =str(signature,'utf-8')
 
-    return signature
+    return signature_in_str
 
-def verify_with_public(signature,person,msg):
+def verify_with_public(signature_in_str,person,msg):
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
-
+    
+    signature = bytes(signature_in_str,'utf-8')
     message = bytes(msg,'utf-8')
+    
     hash_obj = SHA256.new(message)
 
     try:
@@ -172,8 +175,43 @@ def output_json(tempDic,msg):
     # Attach
     msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
 
+def RSA_Encryption(aesKey,person):
+    print("Key: %s"%(aesKey))
+    public_key = RSA.import_key(open(person + '_public_key.pem').read())
+    key_bytes = bytes(aesKey,'utf-8')
+    
+    hash_obj = PKCS1_OAEP.new(public_key)
+    encrypted_key = hash_obj.encrypt(key_bytes)
+    print("encrypted_key: %s\n"%(encrypted_key))
+    
+    base64_bytes = base64.b64encode(encrypted_key)
+    print('Encrypted text after base64: %s\n'%(base64_bytes))
+    
+    key_in_str = str(base64_bytes,'utf-8')
+    
+    print('b64 bytes of key in str: %s\n'%(key_in_str))
+    
+    return key_in_str
+
+def RSA_Decryption(key_in_str,person):
+    private_key = RSA.import_key(open(person + '_private_key.pem').read())
+    
+    b64_bytes = bytes(key_in_str,'utf-8')
+    encrypted_key = base64.b64decode(b64_bytes)
+    
+    hash_obj = PKCS1_OAEP.new(private_key)
+    decrypted_key = hash_obj.decrypt(encrypted_key)
+    
+    print("decrypted_key: %s\n"%(decrypted_key))
+    
+    key_in_str = str(decrypted_key,'utf-8')
+    
+    return key_in_str
+
 # pem_check()
 # list = [person1_email,person2_email,person1_pass] 
-send_mail(user_select())
+# send_mail(user_select())
 
 # verify_with_public(sign_with_private("this is the msg", "p1"), "p1","this is the msg")
+# pem_check()
+# print((RSA_Decryption(RSA_Encryption(keyGen(), 'p1'), "p1")))

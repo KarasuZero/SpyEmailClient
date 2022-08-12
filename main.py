@@ -1,5 +1,6 @@
 import hashlib
 import smtplib
+import base64
 import random
 import json
 import os
@@ -88,7 +89,8 @@ def send_mail(tempList):
                 aes = AESCipher(AesKey)
                 
                 #TODO RSA encrypt with recipient public key before updating
-                tempDic.update({'EncryptionKey':AesKey})
+                RSA_Encrypted_Key = RSA_Encryption(AesKey, tempList[3])
+                tempDic.update({'EncryptionKey':RSA_Encrypted_Key})
                 
                 print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
                  
@@ -145,14 +147,16 @@ def sign_with_private(msg,person):
     signer = PKCS1_v1_5.new(private_key)
     signature = signer.sign(hash_obj)
 
-    print(signature.hex())
+    signature_in_str =str(signature,'utf-8')
 
-    return signature
+    return signature_in_str
 
-def verify_with_public(signature,person,msg):
+def verify_with_public(signature_in_str,person,msg):
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
-
+    
+    signature = bytes(signature_in_str,'utf-8')
     message = bytes(msg,'utf-8')
+    
     hash_obj = SHA256.new(message)
 
     try:
@@ -171,6 +175,38 @@ def output_json(tempDic,msg):
     # Attach
     msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
 
+def RSA_Encryption(aesKey,person):
+    print("Key: %s"%(aesKey))
+    public_key = RSA.import_key(open(person + '_public_key.pem').read())
+    key_bytes = bytes(aesKey,'utf-8')
+    
+    hash_obj = PKCS1_OAEP.new(public_key)
+    encrypted_key = hash_obj.encrypt(key_bytes)
+    print("encrypted_key: %s\n"%(encrypted_key))
+    
+    base64_bytes = base64.b64encode(encrypted_key)
+    print('Encrypted text after base64: %s\n'%(base64_bytes))
+    
+    key_in_str = str(base64_bytes,'utf-8')
+    
+    print('b64 bytes of key in str: %s\n'%(key_in_str))
+    
+    return key_in_str
+
+def RSA_Decryption(key_in_str,person):
+    private_key = RSA.import_key(open(person + '_private_key.pem').read())
+    
+    b64_bytes = bytes(key_in_str,'utf-8')
+    encrypted_key = base64.b64decode(b64_bytes)
+    
+    hash_obj = PKCS1_OAEP.new(private_key)
+    decrypted_key = hash_obj.decrypt(encrypted_key)
+    
+    print("decrypted_key: %s\n"%(decrypted_key))
+    
+    key_in_str = str(decrypted_key,'utf-8')
+    
+    return key_in_str
 
 #app
 while True:
