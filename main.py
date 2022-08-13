@@ -1,20 +1,23 @@
+from email.message import EmailMessage
+from Cipher import AESCipher
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Signature import PKCS1_v1_5
+from Crypto.PublicKey import RSA
+from Crypto.Hash import SHA256
+import imaplib
 import hashlib
 import smtplib
 import base64
 import random
 import json
 import os
-from Cipher import AESCipher
-from Crypto.Cipher import PKCS1_OAEP
-from Crypto.Signature import PKCS1_v1_5
-from Crypto.PublicKey import RSA
-from email.message import EmailMessage
-from Crypto.Hash import SHA256
+import email
 
 person1_email = os.environ.get('P1_EMAIL')
 person1_pass = os.environ.get('P1_PASS')
 person2_email = os.environ.get('P2_EMAIL')
 person2_pass = os.environ.get('P2_PASS')
+host = 'imap.gmail.com' #inbox
 
 def pem_check():
     p1_private_key_exists = os.path.exists('p1_private_key.pem')
@@ -49,7 +52,7 @@ def pem_gen(person): #pass in prefixes
     fd.close()
     
 def user_select(): #select user
-    user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n")
+    user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n\n")
     
     if str(user_select) == "1": #person 1
         print("person 1 selected\n")
@@ -81,7 +84,7 @@ def send_mail(tempList):
         
         tempDic = {'EncryptionKey':'','Signature':''}
         
-        encryption_input = input("Enter 1 to Encypt your msg\nEnter 2 to Skip\n")
+        encryption_input = input("Enter 1 to Encypt your msg\nEnter 2 to Skip\n\n")
         while True:
             if str(encryption_input) == "1":
                 #generatng aeskey
@@ -94,7 +97,7 @@ def send_mail(tempList):
                 RSA_Encrypted_Key = RSA_Encryption(AesKey, tempList[3])
                 tempDic.update({'EncryptionKey':RSA_Encrypted_Key})
                 
-                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
+                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s\n"%(str(body_input),AesKey,aes.encrypt(str(body_input))))
                  
                 msg.set_content(aes.encrypt(str(body_input)))
                 break
@@ -107,7 +110,7 @@ def send_mail(tempList):
             else:
                 print("Please Enter a Valid Input\n")
                 
-        signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n")
+        signing_input = input("Enter 1 to sign your msg\nEnter 2 to Skip\n\n")
         while True:
             if str(signing_input) == "1":
                 tempDic.update({'Signature':sign_with_private(str(body_input), tempList[3])})
@@ -148,15 +151,22 @@ def sign_with_private(msg,person):#pass in the body text as str and sender prefi
 
     signer = PKCS1_v1_5.new(private_key)
     signature = signer.sign(hash_obj)
+    
+    base64_bytes = base64.b64encode(signature)
+    print('signature after base64: %s\n'%(base64_bytes))
+    
+    sig_in_str = str(base64_bytes,'utf-8')
+    
+    print('b64 bytes of signature in str: %s\n'%(sig_in_str))
+    
+    return sig_in_str
 
-    signature_in_str =str(signature,'utf-8')
-
-    return signature_in_str
-
-def verify_with_public(signature_in_str,person,msg):#pass in signature in str format, sender prefixe, and msg recived to verify
+def verify_with_public(sig_in_str,person,msg):#pass in signature in str format, sender prefixe, and msg recived to verify
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
     
-    signature = bytes(signature_in_str,'utf-8')
+    b64_bytes = bytes(sig_in_str,'utf-8')
+    signature = base64.b64decode(b64_bytes)
+    
     message = bytes(msg,'utf-8')
     
     hash_obj = SHA256.new(message)
@@ -187,7 +197,7 @@ def RSA_Encryption(aesKey,person):#pass in the aes key and the selected person p
     print("encrypted_key: %s\n"%(encrypted_key))
     
     base64_bytes = base64.b64encode(encrypted_key)
-    print('Encrypted text after base64: %s\n'%(base64_bytes))
+    print('Encrypted key after base64: %s\n'%(base64_bytes))
     
     key_in_str = str(base64_bytes,'utf-8')
     
@@ -210,6 +220,44 @@ def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and t
     
     return key_in_str
 
+def get_inbox(tempList):#codes from the documentation with modification
+    mail = imaplib.IMAP4_SSL(host)                                      #server
+    mail.login(tempList[0], tempList[2])                                #login user name, user pass
+    mail.select("inbox")                                                #defualt inbox
+    
+    _, search_data = mail.search(None, 'UNSEEN')                        #underscore is used to skip the first data in the tuple(data with no use)
+    my_message = []
+    
+    for num in search_data[0].split():                                  #turning bytes returned from search data in to a list of byte based on spaces(defualt)
+        email_data = {}
+        _, data = mail.fetch(num, '(RFC822)')                           #getting the msg data from gmail
+        _, b = data[0]                                                  #data in bytes
+        
+        email_message = email.message_from_bytes(b)                     #turnind byte into str
+
+        for header in ['subject', 'to', 'from', 'date']:
+            print("{}: {}".format(header, email_message[header]))
+            email_data[header] = email_message[header]
+            #print("in header parsing")
+            
+        for part in email_message.walk():
+            if part.get_content_type() == "application/json":
+                pass
+                
+            if part.get_content_type() == "text/plain":
+                body = part.get_payload(decode=True)
+                email_data['body'] = body.decode()
+                #print("in body parsing")
+                
+            elif part.get_content_type() == "text/html":
+                html_body = part.get_payload(decode=True)
+                email_data['html_body'] = html_body.decode()
+                #print("in html_body parsing")
+                
+        my_message.append(email_data)
+    
+    return my_message
+
 #app
 while True:
     menu_select = input("Enter 1 to Send Email\nEnter 2 to Recive Email\nEnter 3 to Exit\n")
@@ -218,9 +266,9 @@ while True:
         send_mail(user_select())
         
     elif str(menu_select) == "2": #recive email
-        print("Nothing here\n")
-        #user_select()
-        #TODO recive method
+        inbox = get_inbox(user_select())
+        print(inbox)
+        #TODO
         #download attached json file(crdentials.js)
         #if msg is encrypted and signed, then decrypt the msg first before verifying signature
         #if msg is unencrypted and unsigned, then just display as it is

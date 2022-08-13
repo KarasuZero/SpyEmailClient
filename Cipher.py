@@ -1,3 +1,5 @@
+#standard aes ciphter, pass in aeskey to init
+
 import hashlib
 from Crypto import Random
 from Crypto.Cipher import AES
