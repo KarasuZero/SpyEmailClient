@@ -54,18 +54,19 @@ def pem_gen(person): #pass in prefixes
 def user_select(): #select user
     user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n\n")
     
-    if str(user_select) == "1": #person 1
-        print("person 1 selected\n")
-        tempList = [person1_email,person2_email,person1_pass,'p1']
-        return(tempList)
-            
-    elif str(user_select) == "2": #person 2
-        print("person 2 selected\n")
-        tempList = [person2_email,person1_email,person2_pass,'p2']
-        return(tempList)
-            
-    else:
-        print("Please Enter a Valid Input\n")           
+    while True:
+        if str(user_select) == "1": #person 1
+            print("person 1 selected\n")
+            tempList = [person1_email,person2_email,person1_pass,'p1']
+            return(tempList)
+                
+        elif str(user_select) == "2": #person 2
+            print("person 2 selected\n")
+            tempList = [person2_email,person1_email,person2_pass,'p2']
+            return(tempList)
+                
+        else:
+            print("Please Enter a Valid Input\n")    
 
 def send_mail(tempList): 
     #pass in a list with following params:
@@ -187,7 +188,7 @@ def output_json(tempDic,msg):#pass in a dictionary with all the info and msg fro
     # Attach
     msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
 
-def RSA_Encryption(aesKey,person):#pass in the aes key and the selected person prefixes
+def RSA_Encryption(aesKey,person):#pass in the aes key and the recipient person prefixes
     print("Key: %s"%(aesKey))
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
     key_bytes = bytes(aesKey,'utf-8')
@@ -205,7 +206,7 @@ def RSA_Encryption(aesKey,person):#pass in the aes key and the selected person p
     
     return key_in_str
 
-def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and the selected person prefixes
+def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and the recipientd person prefixes
     private_key = RSA.import_key(open(person + '_private_key.pem').read())
     
     b64_bytes = bytes(key_in_str,'utf-8')
@@ -219,6 +220,11 @@ def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and t
     key_in_str = str(decrypted_key,'utf-8')
     
     return key_in_str
+
+def read_json(value):
+    with open('credentials.json', 'r') as cred_file:
+        Recived_Credential = json.load(cred_file)
+    return Recived_Credential[value]
 
 def get_inbox(tempList):#codes from the documentation with modification
     mail = imaplib.IMAP4_SSL(host)                                      #server

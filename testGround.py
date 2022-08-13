@@ -52,18 +52,19 @@ def pem_gen(person): #pass in prefixes
 def user_select(): #select user
     user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n\n")
     
-    if str(user_select) == "1": #person 1
-        print("person 1 selected\n")
-        tempList = [person1_email,person2_email,person1_pass,'p1']
-        return(tempList)
-            
-    elif str(user_select) == "2": #person 2
-        print("person 2 selected\n")
-        tempList = [person2_email,person1_email,person2_pass,'p2']
-        return(tempList)
-            
-    else:
-        print("Please Enter a Valid Input\n")           
+    while True:
+        if str(user_select) == "1": #person 1
+            print("person 1 selected\n")
+            tempList = [person1_email,person2_email,person1_pass,'p1']
+            return(tempList)
+                
+        elif str(user_select) == "2": #person 2
+            print("person 2 selected\n")
+            tempList = [person2_email,person1_email,person2_pass,'p2']
+            return(tempList)
+                
+        else:
+            print("Please Enter a Valid Input\n")           
 
 def send_mail(tempList): 
     #pass in a list with following params:
@@ -127,8 +128,6 @@ def send_mail(tempList):
 
         print("Dic content: %s"%(tempDic))
         print("message send\n")
-        smtp.logout()
-        smtp.close()
 
 def keyGen(): #generates key for aes cipher
     Alphabet_Dic = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -187,7 +186,7 @@ def output_json(tempDic,msg):#pass in a dictionary with all the info and msg fro
     # Attach
     msg.add_attachment(bs, maintype='application', subtype='json', filename='credentials.json')
 
-def RSA_Encryption(aesKey,person):#pass in the aes key and the selected person prefixes
+def RSA_Encryption(aesKey,person):#pass in the aes key and the recipient person prefixes
     print("Key: %s"%(aesKey))
     public_key = RSA.import_key(open(person + '_public_key.pem').read())
     key_bytes = bytes(aesKey,'utf-8')
@@ -205,7 +204,7 @@ def RSA_Encryption(aesKey,person):#pass in the aes key and the selected person p
     
     return key_in_str
 
-def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and the selected person prefixes
+def RSA_Decryption(key_in_str,person):#pass in encrypted key in str format and the recipientd person prefixes
     private_key = RSA.import_key(open(person + '_private_key.pem').read())
     
     b64_bytes = bytes(key_in_str,'utf-8')
@@ -261,10 +260,10 @@ def get_inbox_test(tempList):#codes from the documentation with modification
     
     return my_message
 
-def read_json():
+def read_json(value):
     with open('credentials.json', 'r') as cred_file:
-        pass
-    return Recived_Credential
+        Recived_Credential = json.load(cred_file)
+    return Recived_Credential[value]
 
 def get_body(msg):
     if msg.is_multipart():
@@ -290,7 +289,52 @@ def inbox_menu(tempList): #main method for reciving, add other funcitons here to
     con = imaplib.IMAP4_SSL(host)
     con.login(tempList[0],tempList[2])
     con.select('INBOX')
+
+def send_quick_mail(sub,body,encrypt,sign):
+    msg = EmailMessage()
     
+    with smtplib.SMTP_SSL('smtp.gmail.com',465) as smtp:
+        
+        smtp.login(person1_email, person1_pass) #sender email and pass
+       
+        msg['Subject'] = str(sub) #setting subject
+        msg['From'] = person1_email      #setting sender email
+        msg['To'] = person2_email         #setting reciver email
+        
+        tempDic = {'EncryptionKey':'','Signature':''}
+        
+        if encrypt:
+                #generatng aeskey
+                AesKey = keyGen()
+                
+                #encrypting
+                aes = AESCipher(AesKey)
+                
+                #TODO RSA encrypt with recipient public key before updating
+                RSA_Encrypted_Key = RSA_Encryption(AesKey, 'p2')
+                tempDic.update({'EncryptionKey':RSA_Encrypted_Key})
+                
+                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s\n"%(str(body),AesKey,aes.encrypt(str(body))))
+                 
+                msg.set_content(aes.encrypt(str(body)))
+               
+        else :
+                tempDic.update({'EncryptionKey':"Unencrypted"})
+                msg.set_content(str(body))
+                
+        if sign:
+            tempDic.update({'Signature':sign_with_private(str(body), 'p1')})
+            print("Signature: %s"%(tempDic['Signature']))
+            
+        else:
+            tempDic.update({'Signature':'Unsigned'})   
+            
+        output_json(tempDic,msg)
+        smtp.send_message(msg) #sender and reciver email
+
+        print("Dic content: %s"%(tempDic))
+        print("quick mail sended\n") 
+                 
     
 # pem_check()
 # list = [person1_email,person2_email,person1_pass] 
@@ -303,3 +347,30 @@ def inbox_menu(tempList): #main method for reciving, add other funcitons here to
 # print(inbox)
 # sign_with_private("this is the msg", 'p1')
 # verify_with_public(sign_with_private("this is the msg", "p1"), "p1","this is the msg")
+# send_quick_mail('p1 to p2 quick_mail', 'test msg', True, True)
+
+#dcrypting the aes key from json then print the msg as plain text
+print(read_json('EncryptionKey'))
+# RSA_Decryption(read_json('EncryptionKey'), 'p2')
+aes = AESCipher(RSA_Decryption(read_json('EncryptionKey'), 'p2'))
+print(aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
+    
+#compare plaintext recived to signature
+print(read_json('Signature'))
+verify_with_public(read_json('Signature'), 'p1', aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
+
+
+
+# if encrypt:
+#     #decrypt the data
+#     #display data
+#     if sign:
+#         #verify with decrypted data
+#         #display verificaiton statues
+
+# else:
+#     #display data
+#     if sign:  
+#       verify with decrypted data
+#        display verificaiton statues
+    
