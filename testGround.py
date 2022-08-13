@@ -17,6 +17,51 @@ person1_pass = os.environ.get('P1_PASS')
 person2_email = os.environ.get('P2_EMAIL')
 person2_pass = os.environ.get('P2_PASS')
 
+def send_quick_mail(sub,body,encrypt,sign):
+    msg = EmailMessage()
+    
+    with smtplib.SMTP_SSL('smtp.gmail.com',465) as smtp:
+        
+        smtp.login(person1_email, person1_pass) #sender email and pass
+       
+        msg['Subject'] = str(sub) #setting subject
+        msg['From'] = person1_email      #setting sender email
+        msg['To'] = person2_email         #setting reciver email
+        
+        tempDic = {'EncryptionKey':'','Signature':''}
+        
+        if encrypt:
+                #generatng aeskey
+                AesKey = keyGen()
+                
+                #encrypting
+                aes = AESCipher(AesKey)
+                
+                #TODO RSA encrypt with recipient public key before updating
+                RSA_Encrypted_Key = RSA_Encryption(AesKey, 'p2')
+                tempDic.update({'EncryptionKey':RSA_Encrypted_Key})
+                
+                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s\n"%(str(body),AesKey,aes.encrypt(str(body))))
+                 
+                msg.set_content(aes.encrypt(str(body)))
+               
+        else :
+                tempDic.update({'EncryptionKey':"Unencrypted"})
+                msg.set_content(str(body))
+                
+        if sign:
+            tempDic.update({'Signature':sign_with_private(str(body), 'p1')})
+            print("Signature: %s"%(tempDic['Signature']))
+            
+        else:
+            tempDic.update({'Signature':'Unsigned'})   
+            
+        output_json(tempDic,msg)
+        smtp.send_message(msg) #sender and reciver email
+
+        print("Dic content: %s"%(tempDic))
+        print("quick mail sended\n") 
+
 def pem_check():
     p1_private_key_exists = os.path.exists('p1_private_key.pem')
     p1_public_key_exists = os.path.exists('p1_public_key.pem')
@@ -285,57 +330,46 @@ def get_emails(result_bytes):
         
     return msgs
 
-def inbox_menu(tempList): #main method for reciving, add other funcitons here to modify
+def inbox_menu(tempList): #main method for reciving
     con = imaplib.IMAP4_SSL(host)
     con.login(tempList[0],tempList[2])
     con.select('INBOX')
-
-def send_quick_mail(sub,body,encrypt,sign):
-    msg = EmailMessage()
     
-    with smtplib.SMTP_SSL('smtp.gmail.com',465) as smtp:
+    #downlaod attachment
+    
+    #after getting credential 
+    credentials_scheme()
+    # os.remove("credentials.json") #remove credentials.json
+    
+def credentials_scheme():
+    encryption_statues = read_json('EncryptionKey')
+    signature_statues = read_json('Signature')
+    
+    if encryption_statues == "Unencrypted":
+        if signature_statues == "Unsigned":
+            #TODO print email body as it is
+            pass
         
-        smtp.login(person1_email, person1_pass) #sender email and pass
-       
-        msg['Subject'] = str(sub) #setting subject
-        msg['From'] = person1_email      #setting sender email
-        msg['To'] = person2_email         #setting reciver email
-        
-        tempDic = {'EncryptionKey':'','Signature':''}
-        
-        if encrypt:
-                #generatng aeskey
-                AesKey = keyGen()
-                
-                #encrypting
-                aes = AESCipher(AesKey)
-                
-                #TODO RSA encrypt with recipient public key before updating
-                RSA_Encrypted_Key = RSA_Encryption(AesKey, 'p2')
-                tempDic.update({'EncryptionKey':RSA_Encrypted_Key})
-                
-                print("Your msg is: %s\n\nThe AesKey is: %s\nFinal Hash is: %s\n"%(str(body),AesKey,aes.encrypt(str(body))))
-                 
-                msg.set_content(aes.encrypt(str(body)))
-               
-        else :
-                tempDic.update({'EncryptionKey':"Unencrypted"})
-                msg.set_content(str(body))
-                
-        if sign:
-            tempDic.update({'Signature':sign_with_private(str(body), 'p1')})
-            print("Signature: %s"%(tempDic['Signature']))
-            
         else:
-            tempDic.update({'Signature':'Unsigned'})   
-            
-        output_json(tempDic,msg)
-        smtp.send_message(msg) #sender and reciver email
-
-        print("Dic content: %s"%(tempDic))
-        print("quick mail sended\n") 
-                 
+            #TODO verify the signature using the email body
+            pass
+        
+    else:
+        #creating aes obj with decrypted key from credentials
+        aes = AESCipher(RSA_Decryption(read_json('EncryptionKey'), 'p2'))
+        
+        #TODO decrypt msg with aes obj
+        #TODO print the decrypted msg
+        
+        if signature_statues == "Unsigned":
+            #TODO print email body as it is
+            pass
+        
+        else:
+            #TODO verify the signature using the decrypted msg
+            pass
     
+                
 # pem_check()
 # list = [person1_email,person2_email,person1_pass] 
 # send_mail(user_select())
@@ -349,28 +383,10 @@ def send_quick_mail(sub,body,encrypt,sign):
 # verify_with_public(sign_with_private("this is the msg", "p1"), "p1","this is the msg")
 # send_quick_mail('p1 to p2 quick_mail', 'test msg', True, True)
 
-#dcrypting the aes key from json then print the msg as plain text
-print(read_json('EncryptionKey'))
-# RSA_Decryption(read_json('EncryptionKey'), 'p2')
-aes = AESCipher(RSA_Decryption(read_json('EncryptionKey'), 'p2'))
-print(aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
+# print(read_json('EncryptionKey'))
+# # RSA_Decryption(read_json('EncryptionKey'), 'p2')
+# aes = AESCipher(RSA_Decryption(read_json('EncryptionKey'), 'p2'))
+# print(aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
     
-#compare plaintext recived to signature
-print(read_json('Signature'))
-verify_with_public(read_json('Signature'), 'p1', aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
-
-
-
-# if encrypt:
-#     #decrypt the data
-#     #display data
-#     if sign:
-#         #verify with decrypted data
-#         #display verificaiton statues
-
-# else:
-#     #display data
-#     if sign:  
-#       verify with decrypted data
-#        display verificaiton statues
-    
+# print(read_json('Signature'))
+# verify_with_public(read_json('Signature'), 'p1', aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
