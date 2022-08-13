@@ -127,6 +127,8 @@ def send_mail(tempList):
 
         print("Dic content: %s"%(tempDic))
         print("message send\n")
+        smtp.logout()
+        smtp.close()
 
 def keyGen(): #generates key for aes cipher
     Alphabet_Dic = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
