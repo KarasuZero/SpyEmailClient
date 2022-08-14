@@ -11,6 +11,7 @@ import random
 import json
 import os
 import email
+import imaplib
 
 person1_email = os.environ.get('P1_EMAIL')
 person1_pass = os.environ.get('P1_PASS')
@@ -100,12 +101,12 @@ def user_select(): #select user
     while True:
         if str(user_select) == "1": #person 1
             print("person 1 selected\n")
-            tempList = [person1_email,person2_email,person1_pass,'p1']
+            tempList = [person1_email,person2_email,person1_pass,'p1','p2']
             return(tempList)
                 
         elif str(user_select) == "2": #person 2
             print("person 2 selected\n")
-            tempList = [person2_email,person1_email,person2_pass,'p2']
+            tempList = [person2_email,person1_email,person2_pass,'p2','p1']
             return(tempList)
                 
         else:
@@ -289,22 +290,22 @@ def get_inbox_test(tempList):#codes from the documentation with modification
             
         for part in email_message.walk():
             if part.get_content_type() == "application/json":
-                pass
-                
-            if part.get_content_type() == "text/plain":
-                body = part.get_payload(decode=True)
-                email_data['body'] = body.decode()
-                #print("in body parsing")
-                
-            elif part.get_content_type() == "text/html":
-                html_body = part.get_payload(decode=True)
-                email_data['html_body'] = html_body.decode()
-                #print("in html_body parsing")
-                
+                fname = part.get_filename()
+                print("saving file")
+                with open(fname,'wb') as f:
+                    f.write(part.get_payload(decode=True))
+     
         my_message.append(email_data)
+        
+        #getting the body byte, turn it into str, then remove extra bits
+        body_text = get_body(email_message)
+        body_text = str(body_text, 'utf-8')
+        body_text = body_text.replace('\r', '')
+        body_text = body_text.replace('\n', '')
+        credentials_scheme(body_text, tempList)
     
     return my_message
-
+        
 def read_json(value):
     with open('credentials.json', 'r') as cred_file:
         Recived_Credential = json.load(cred_file)
@@ -317,7 +318,7 @@ def get_body(msg):
     else: 
         return msg.get_payload(None,True)
     
-def search(key, value, con):
+def search(key, value, con): #returns result byte matches the search parameter that can be put in get_email
     result, data = con.search(None, key,'"()"'.format(value))
     return data
 
@@ -331,43 +332,41 @@ def get_emails(result_bytes):
     return msgs
 
 def inbox_menu(tempList): #main method for reciving
-    con = imaplib.IMAP4_SSL(host)
-    con.login(tempList[0],tempList[2])
+    con = imaplib.IMAP4_SSL(host)                       #secured con
+    con.login(tempList[0],tempList[2])                  #login to interface
     con.select('INBOX')
     
     #downlaod attachment
+    
     
     #after getting credential 
     credentials_scheme()
     # os.remove("credentials.json") #remove credentials.json
     
-def credentials_scheme():
+def credentials_scheme(body_text,tempList):
     encryption_statues = read_json('EncryptionKey')
     signature_statues = read_json('Signature')
     
     if encryption_statues == "Unencrypted":
         if signature_statues == "Unsigned":
-            #TODO print email body as it is
-            pass
+            print("Body: %s\n"%(body_text))
         
         else:
-            #TODO verify the signature using the email body
-            pass
+            print("Body: %s\n"%(body_text))
+            verify_with_public(read_json('Signature'), tempList[4], body_text)
         
     else:
         #creating aes obj with decrypted key from credentials
         aes = AESCipher(RSA_Decryption(read_json('EncryptionKey'), 'p2'))
         
-        #TODO decrypt msg with aes obj
-        #TODO print the decrypted msg
+        decrypted = aes.decrypt(body_text)
         
         if signature_statues == "Unsigned":
-            #TODO print email body as it is
-            pass
+            print("Body: %s\n"%(decrypted))
         
         else:
-            #TODO verify the signature using the decrypted msg
-            pass
+            print("Body: %s\n"%(decrypted))
+            verify_with_public(read_json('Signature'), tempList[4], decrypted)
     
                 
 # pem_check()
@@ -390,3 +389,6 @@ def credentials_scheme():
     
 # print(read_json('Signature'))
 # verify_with_public(read_json('Signature'), 'p1', aes.decrypt("31yWNjPjWxx7+CboBuYv32qeSm2jbj5w2X4R+yDfhYA="))
+
+send_quick_mail("Quick Read", "Test Text", True, False)
+get_inbox_test(user_select())

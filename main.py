@@ -12,6 +12,7 @@ import random
 import json
 import os
 import email
+import imaplib
 
 person1_email = os.environ.get('P1_EMAIL')
 person1_pass = os.environ.get('P1_PASS')
@@ -52,22 +53,21 @@ def pem_gen(person): #pass in prefixes
     fd.close()
     
 def user_select(): #select user
-    user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n\n")
-    
     while True:
+        user_select = input("Enter 1 to Select Person 1\nEnter 2 to Select Person 2\n\n")
         if str(user_select) == "1": #person 1
             print("person 1 selected\n")
-            tempList = [person1_email,person2_email,person1_pass,'p1']
+            tempList = [person1_email,person2_email,person1_pass,'p1','p2']
             return(tempList)
                 
         elif str(user_select) == "2": #person 2
             print("person 2 selected\n")
-            tempList = [person2_email,person1_email,person2_pass,'p2']
+            tempList = [person2_email,person1_email,person2_pass,'p2','p1']
             return(tempList)
                 
         else:
-            print("Please Enter a Valid Input\n")    
-
+            print("Please Enter a Valid Input\n")
+            
 def send_mail(tempList): 
     #pass in a list with following params:
     #[sender email,recipient email,sender app pass, selected user prefix for other methods]
@@ -174,7 +174,7 @@ def verify_with_public(sig_in_str,person,msg):#pass in signature in str format, 
 
     try:
         PKCS1_v1_5.new(public_key).verify(hash_obj, signature)
-        print ("The signature is valid.")
+        print ("The signature is valid.\n")
     except (ValueError, TypeError):
         print ("The signature is not valid.")
 
@@ -248,38 +248,63 @@ def get_inbox(tempList):#codes from the documentation with modification
             
         for part in email_message.walk():
             if part.get_content_type() == "application/json":
-                pass
-                
-            if part.get_content_type() == "text/plain":
-                body = part.get_payload(decode=True)
-                email_data['body'] = body.decode()
-                #print("in body parsing")
-                
-            elif part.get_content_type() == "text/html":
-                html_body = part.get_payload(decode=True)
-                email_data['html_body'] = html_body.decode()
-                #print("in html_body parsing")
-                
+                fname = part.get_filename()
+                print("saving file")
+                with open(fname,'wb') as f:
+                    f.write(part.get_payload(decode=True))
+     
         my_message.append(email_data)
+        
+        #getting the body byte, turn it into str, then remove extra bits
+        body_text = get_body(email_message)
+        body_text = str(body_text, 'utf-8')
+        body_text = body_text.replace('\r', '')
+        body_text = body_text.replace('\n', '')
+        credentials_scheme(body_text, tempList)
     
     return my_message
 
+def get_body(msg):
+    if msg.is_multipart():
+        return get_body(msg.get_payload(0))
+    
+    else: 
+        return msg.get_payload(None,True)
+    
+def credentials_scheme(body_text,tempList):
+    encryption_statues = read_json('EncryptionKey')
+    signature_statues = read_json('Signature')
+    
+    if encryption_statues == "Unencrypted":
+        if signature_statues == "Unsigned":
+            print("Body: %s\n"%(body_text))
+        
+        else:
+            print("Body: %s\n"%(body_text))
+            verify_with_public(read_json('Signature'), tempList[4], body_text)
+        
+    else:
+        #creating aes obj with decrypted key from credentials
+        aes = AESCipher(RSA_Decryption(read_json('EncryptionKey'), tempList[4]))
+        
+        decrypted = aes.decrypt(body_text)
+        
+        if signature_statues == "Unsigned":
+            print("Body: %s\n"%(decrypted))
+        
+        else:
+            print("Body: %s\n"%(decrypted))
+            verify_with_public(read_json('Signature'), tempList[4], decrypted)
+
 #app
 while True:
-    menu_select = input("Enter 1 to Send Email\nEnter 2 to Recive Email\nEnter 3 to Exit\n")
+    menu_select = input("Enter 1 to Send Email\nEnter 2 to Recive Email\nEnter 3 to Exit\n\n")
     
     if str(menu_select) == "1": #sending email
         send_mail(user_select())
         
     elif str(menu_select) == "2": #recive email
-        inbox = get_inbox(user_select())
-        print(inbox)
-        #TODO
-        #download attached json file(crdentials.js)
-        #if msg is encrypted and signed, then decrypt the msg first before verifying signature
-        #if msg is unencrypted and unsigned, then just display as it is
-        #if msg is encrypted and unsigned, then unencrypt then display the msg
-        #if msg is unencrypted and signed, then verify the signature as usual
+        get_inbox(user_select())
         
     elif str(menu_select) == "3": #exit
         break
